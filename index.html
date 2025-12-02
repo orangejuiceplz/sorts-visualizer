@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hoare Quicksort Visualizer</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --text-color: #e2e8f0;
+            --primary: #3b82f6;
+            --accent: #f43f5e;
+            --pivot: #eab308;
+            --sorted: #22c55e;
+            --pointer-i: #a855f7;
+            --pointer-j: #06b6d4;
+            --bar-bg: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 10px; }
+        p { color: #94a3b8; max-width: 600px; text-align: center; margin-bottom: 30px; }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        button:active { transform: scale(0.95); }
+        
+        #btn-generate { background-color: var(--bar-bg); color: white; }
+        #btn-step { background-color: var(--primary); color: white; font-size: 1.1rem;}
+        #btn-auto { background-color: var(--accent); color: white; }
+
+        .visualizer-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            height: 300px;
+            width: 100%;
+            max-width: 800px;
+            gap: 8px;
+            padding: 20px;
+            background: #1e293b;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .bar-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            position: relative;
+        }
+
+        .bar {
+            width: 100%;
+            background-color: var(--bar-bg);
+            border-radius: 4px 4px 0 0;
+            transition: height 0.3s, background-color 0.3s;
+            position: relative;
+        }
+
+        .value-label {
+            margin-top: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        /* State Classes */
+        .bar.active-range { border: 1px solid rgba(255,255,255,0.2); }
+        .bar.is-pivot { background-color: var(--pivot) !important; }
+        .bar.sorted { background-color: var(--sorted) !important; opacity: 0.5; }
+        
+        /* Pointers */
+        .pointer-marker {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+            position: absolute;
+            bottom: -35px;
+            opacity: 0;
+            transition: all 0.3s;
+        }
+
+        .pointer-marker.visible { opacity: 1; }
+        .marker-i { background-color: var(--pointer-i); left: -5px;}
+        .marker-j { background-color: var(--pointer-j); right: -5px;}
+
+        .info-panel {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 800px;
+            border-left: 5px solid var(--primary);
+        }
+
+        .status-line { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
+        .detail-line { color: #94a3b8; font-family: monospace; }
+
+        .legend {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 0.85rem;
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Hoare Quicksort Practice</h1>
+    <p>
+        Hoare partition uses two pointers (i and j) starting at opposite ends. 
+        They move toward each other until they find a pair to swap, or they cross.
+    </p>
+
+    <div class="controls">
+        <button id="btn-generate" onclick="initArray()">New Array</button>
+        <button id="btn-step" onclick="nextStep()">Step Forward</button>
+        <button id="btn-auto" onclick="toggleAuto()">Auto Play</button>
+    </div>
+
+    <div class="visualizer-container" id="container">
+        </div>
+
+    <div class="info-panel">
+        <div class="status-line" id="status">Ready to start.</div>
+        <div class="detail-line" id="details">Click "Step Forward" to begin.</div>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background:var(--pivot)"></div>Pivot Value</div>
+            <div class="legend-item"><div class="dot" style="background:var(--pointer-i)"></div>Left Pointer (i)</div>
+            <div class="legend-item"><div class="dot" style="background:var(--pointer-j)"></div>Right Pointer (j)</div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('container');
+        const statusEl = document.getElementById('status');
+        const detailEl = document.getElementById('details');
+        
+        let array = [];
+        let generator = null;
+        let isAutoPlaying = false;
+        let autoInterval = null;
+        
+        // Configuration
+        const ARR_SIZE = 12;
+        const MIN_VAL = 10;
+        const MAX_VAL = 90;
+
+        // Initialize
+        function initArray() {
+            stopAuto();
+            array = [];
+            container.innerHTML = '';
+            for (let k = 0; k < ARR_SIZE; k++) {
+                array.push(Math.floor(Math.random() * (MAX_VAL - MIN_VAL + 1)) + MIN_VAL);
+            }
+            renderArray();
+            
+            // Create the generator instance
+            generator = quickSortGenerator(array, 0, array.length - 1);
+            statusEl.textContent = "New Array Generated";
+            detailEl.textContent = "Current Pivot: None";
+        }
+
+        // Render the bars
+        function renderArray(state = {}) {
+            container.innerHTML = '';
+            
+            array.forEach((val, idx) => {
+                const barContainer = document.createElement('div');
+                barContainer.className = 'bar-container';
+
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                bar.style.height = `${val * 3}px`;
+                
+                // Colors based on state
+                if (state.sorted && state.sorted.includes(idx)) bar.classList.add('sorted');
+                
+                // Highlight current partition range
+                if (state.low !== undefined && idx >= state.low && idx <= state.high) {
+                    bar.classList.add('active-range');
+                }
+
+                // Highlight Pivot (visually, the value being compared against)
+                // In Hoare, the pivot is a value, but usually derived from arr[low] initially
+                if (state.pivotIdx === idx) {
+                    bar.classList.add('is-pivot');
+                }
+
+                // Value Label
+                const label = document.createElement('span');
+                label.className = 'value-label';
+                label.textContent = val;
+
+                // Markers for i and j
+                if (state.i === idx) {
+                    const markI = document.createElement('div');
+                    markI.className = 'pointer-marker marker-i visible';
+                    markI.textContent = 'i';
+                    barContainer.appendChild(markI);
+                }
+                if (state.j === idx) {
+                    const markJ = document.createElement('div');
+                    markJ.className = 'pointer-marker marker-j visible';
+                    markJ.textContent = 'j';
+                    barContainer.appendChild(markJ);
+                }
+
+                barContainer.appendChild(bar);
+                barContainer.appendChild(label);
+                container.appendChild(barContainer);
+            });
+        }
+
+        function nextStep() {
+            if (!generator) return;
+            
+            const result = generator.next();
+            
+            if (result.done) {
+                statusEl.textContent = "Sorting Complete!";
+                detailEl.textContent = "Array is fully sorted.";
+                stopAuto();
+                renderArray({ sorted: array.map((_, i) => i) }); // Highlight all green
+                return;
+            }
+
+            const state = result.value;
+            renderArray(state);
+            statusEl.textContent = state.msg;
+            
+            let detailText = `Range: [${state.low}, ${state.high}] | Pivot Value: ${state.pivotVal}`;
+            if(state.compare) detailText += ` | Comparing: ${state.compare}`;
+            detailEl.textContent = detailText;
+        }
+
+        function toggleAuto() {
+            if (isAutoPlaying) {
+                stopAuto();
+            } else {
+                isAutoPlaying = true;
+                document.getElementById('btn-auto').textContent = "Stop Auto";
+                autoInterval = setInterval(nextStep, 600);
+            }
+        }
+
+        function stopAuto() {
+            isAutoPlaying = false;
+            document.getElementById('btn-auto').textContent = "Auto Play";
+            clearInterval(autoInterval);
+        }
+
+        // --- THE ALGORITHM (Hoare Logic) ---
+        
+        function* quickSortGenerator(arr, low, high) {
+            if (low < high) {
+                // Yield state: Starting partition
+                yield { 
+                    arr: [...arr], low, high, i: low-1, j: high+1, 
+                    pivotIdx: low, pivotVal: arr[low],
+                    msg: `Partitioning range [${low}, ${high}]. Pivot is ${arr[low]}.`
+                };
+
+                // Perform Partition and yield intermediate steps
+                // We delegate to a specific partition generator
+                const p = yield* partitionGenerator(arr, low, high);
+
+                // Recursively sort left
+                yield* quickSortGenerator(arr, low, p);
+                
+                // Recursively sort right
+                yield* quickSortGenerator(arr, p + 1, high);
+            } else if (low === high) {
+                 yield { 
+                    arr: [...arr], low, high, 
+                    msg: `Single element [${low}] is already sorted.`
+                };
+            }
+        }
+
+        function* partitionGenerator(arr, low, high) {
+            const pivot = arr[low];
+            let i = low - 1;
+            let j = high + 1;
+
+            while (true) {
+                // Find element on left that should be on right
+                do {
+                    i++;
+                    yield { 
+                        arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
+                        msg: `Moving i right... Is ${arr[i]} < ${pivot}?`,
+                        compare: `${arr[i]} < ${pivot}`
+                    };
+                } while (arr[i] < pivot);
+
+                // Find element on right that should be on left
+                do {
+                    j--;
+                    yield { 
+                        arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
+                        msg: `Moving j left... Is ${arr[j]} > ${pivot}?`,
+                        compare: `${arr[j]} > ${pivot}`
+                    };
+                } while (arr[j] > pivot);
+
+                // Check if pointers crossed
+                if (i >= j) {
+                    yield { 
+                        arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
+                        msg: `Pointers crossed (i >= j). Partition point is ${j}.`
+                    };
+                    return j;
+                }
+
+                // Swap
+                yield { 
+                    arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
+                    msg: `Swapping ${arr[i]} and ${arr[j]} because they are on wrong sides.`
+                };
+                
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+
+                yield { 
+                    arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
+                    msg: `Swapped!`
+                };
+            }
+        }
+
+        // Start on load
+        window.onload = initArray;
+
+    </script>
+</body>
+</html>
