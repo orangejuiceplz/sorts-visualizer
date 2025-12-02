@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hoare Quicksort Visualizer</title>
+    <title>Hoare Quicksort Trainer</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -15,6 +15,7 @@
             --pointer-i: #a855f7;
             --pointer-j: #06b6d4;
             --bar-bg: #334155;
+            --interactive-bg: #1e293b;
         }
 
         body {
@@ -29,13 +30,40 @@
             padding: 20px;
         }
 
-        h1 { margin-bottom: 10px; }
-        p { color: #94a3b8; max-width: 600px; text-align: center; margin-bottom: 30px; }
+        h1 { margin-bottom: 5px; }
+        .subtitle { color: #94a3b8; margin-bottom: 25px; font-size: 0.9rem; }
 
+        /* Mode Switcher */
+        .mode-switch {
+            background: #1e293b;
+            padding: 5px;
+            border-radius: 8px;
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+        .mode-btn {
+            background: transparent;
+            color: #94a3b8;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .mode-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Controls */
         .controls {
             display: flex;
-            gap: 15px;
-            margin-bottom: 30px;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
         button {
@@ -44,37 +72,46 @@
             border-radius: 6px;
             font-weight: bold;
             cursor: pointer;
-            transition: transform 0.1s;
+            transition: all 0.1s;
         }
-
         button:active { transform: scale(0.95); }
-        
-        #btn-generate { background-color: var(--bar-bg); color: white; }
-        #btn-step { background-color: var(--primary); color: white; font-size: 1.1rem;}
-        #btn-auto { background-color: var(--accent); color: white; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+        .btn-new { background-color: var(--bar-bg); color: white; }
+        .btn-action { background-color: var(--primary); color: white; min-width: 100px; }
+        .btn-swap { background-color: var(--accent); color: white; display: none; }
+        .btn-split { background-color: var(--sorted); color: white; display: none; }
+
+        /* Visualizer Area */
         .visualizer-container {
             display: flex;
             justify-content: center;
             align-items: flex-end;
-            height: 300px;
+            height: 320px;
             width: 100%;
             max-width: 800px;
-            gap: 8px;
-            padding: 20px;
-            background: #1e293b;
+            gap: 6px;
+            padding: 20px 20px 40px 20px; /* Extra bottom padding for markers */
+            background: var(--interactive-bg);
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
             margin-bottom: 20px;
+            position: relative;
         }
 
-        .bar-container {
+        .bar-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
             flex: 1;
             position: relative;
+            height: 100%;
+            justify-content: flex-end;
+            cursor: default;
         }
+
+        .bar-wrapper.clickable { cursor: pointer; }
+        .bar-wrapper.clickable:hover .bar { filter: brightness(1.3); }
 
         .bar {
             width: 100%;
@@ -86,17 +123,18 @@
 
         .value-label {
             margin-top: 5px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: bold;
+            color: #64748b;
         }
 
         /* State Classes */
-        .bar.active-range { border: 1px solid rgba(255,255,255,0.2); }
-        .bar.is-pivot { background-color: var(--pivot) !important; }
-        .bar.sorted { background-color: var(--sorted) !important; opacity: 0.5; }
+        .bar.active-range { border: 1px solid rgba(255,255,255,0.15); }
+        .bar.is-pivot { background-color: var(--pivot) !important; color: black; }
+        .bar.sorted { background-color: var(--sorted) !important; opacity: 0.3; }
         
         /* Pointers */
-        .pointer-marker {
+        .pointer {
             width: 24px;
             height: 24px;
             border-radius: 50%;
@@ -108,14 +146,13 @@
             font-weight: bold;
             position: absolute;
             bottom: -35px;
-            opacity: 0;
-            transition: all 0.3s;
+            transition: left 0.3s ease-in-out;
+            z-index: 10;
         }
+        .ptr-i { background-color: var(--pointer-i); box-shadow: 0 0 10px var(--pointer-i); }
+        .ptr-j { background-color: var(--pointer-j); box-shadow: 0 0 10px var(--pointer-j); }
 
-        .pointer-marker.visible { opacity: 1; }
-        .marker-i { background-color: var(--pointer-i); left: -5px;}
-        .marker-j { background-color: var(--pointer-j); right: -5px;}
-
+        /* Info Panel */
         .info-panel {
             background: #1e293b;
             padding: 20px;
@@ -123,16 +160,20 @@
             width: 100%;
             max-width: 800px;
             border-left: 5px solid var(--primary);
+            min-height: 100px;
         }
 
-        .status-line { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
-        .detail-line { color: #94a3b8; font-family: monospace; }
+        .status-line { font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; }
+        .detail-line { color: #94a3b8; font-family: monospace; font-size: 0.95rem; }
+        .feedback-line { color: var(--accent); font-weight: bold; margin-top: 5px; min-height: 1.5em; }
+        .feedback-line.success { color: var(--sorted); }
 
         .legend {
             display: flex;
             gap: 15px;
-            margin-top: 10px;
-            font-size: 0.85rem;
+            margin-top: 15px;
+            font-size: 0.8rem;
+            flex-wrap: wrap;
         }
         .legend-item { display: flex; align-items: center; gap: 5px; }
         .dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -141,233 +182,95 @@
 </head>
 <body>
 
-    <h1>Hoare Quicksort Practice</h1>
-    <p>
-        Hoare partition uses two pointers (i and j) starting at opposite ends. 
-        They move toward each other until they find a pair to swap, or they cross.
-    </p>
+    <h1>Hoare Quicksort Trainer</h1>
+    <div class="subtitle">Practice the pointer logic and crossing conditions</div>
+
+    <div class="mode-switch">
+        <button class="mode-btn active" id="mode-watch" onclick="setMode('watch')">👀 Watch Mode</button>
+        <button class="mode-btn" id="mode-practice" onclick="setMode('practice')">🎮 Practice Mode</button>
+    </div>
 
     <div class="controls">
-        <button id="btn-generate" onclick="initArray()">New Array</button>
-        <button id="btn-step" onclick="nextStep()">Step Forward</button>
-        <button id="btn-auto" onclick="toggleAuto()">Auto Play</button>
+        <button class="btn-new" onclick="initGame()">New Array</button>
+        
+        <button id="btn-step" class="btn-action" onclick="stepVisualizer()">Next Step</button>
+        <button id="btn-auto" class="btn-action" onclick="toggleAuto()">Auto Play</button>
+
+        <button id="btn-swap" class="btn-swap" onclick="userCheckSwap()">Swap Elements</button>
+        <button id="btn-split" class="btn-split" onclick="userCheckSplit()">Partition Done (Split)</button>
     </div>
 
     <div class="visualizer-container" id="container">
         </div>
 
-    <div class="info-panel">
-        <div class="status-line" id="status">Ready to start.</div>
-        <div class="detail-line" id="details">Click "Step Forward" to begin.</div>
+    <div class="info-panel" id="info-panel">
+        <div class="status-line" id="status">Welcome! Select a mode to begin.</div>
+        <div class="detail-line" id="details"></div>
+        <div class="feedback-line" id="feedback"></div>
         
         <div class="legend">
             <div class="legend-item"><div class="dot" style="background:var(--pivot)"></div>Pivot Value</div>
-            <div class="legend-item"><div class="dot" style="background:var(--pointer-i)"></div>Left Pointer (i)</div>
-            <div class="legend-item"><div class="dot" style="background:var(--pointer-j)"></div>Right Pointer (j)</div>
+            <div class="legend-item"><div class="dot" style="background:var(--pointer-i)"></div>Left Ptr (i)</div>
+            <div class="legend-item"><div class="dot" style="background:var(--pointer-j)"></div>Right Ptr (j)</div>
         </div>
     </div>
 
     <script>
-        const container = document.getElementById('container');
-        const statusEl = document.getElementById('status');
-        const detailEl = document.getElementById('details');
-        
+        // --- State ---
         let array = [];
-        let generator = null;
-        let isAutoPlaying = false;
-        let autoInterval = null;
+        let mode = 'watch'; // 'watch' | 'practice'
         
-        // Configuration
-        const ARR_SIZE = 12;
-        const MIN_VAL = 10;
-        const MAX_VAL = 90;
+        // Watch Mode State
+        let generator = null;
+        let autoInterval = null;
 
-        // Initialize
-        function initArray() {
+        // Practice Mode State
+        let pState = {
+            step: 'idle', // idle, i_move, j_move, decision
+            low: 0, high: 0,
+            i: -1, j: -1,
+            pivotIdx: -1, pivotVal: -1,
+            stack: [], // For recursion simulation
+            sorted: [] // Indices that are sorted
+        };
+
+        const CONFIG = { size: 10, min: 10, max: 90 };
+
+        // --- Initialization ---
+        function initGame() {
             stopAuto();
             array = [];
-            container.innerHTML = '';
-            for (let k = 0; k < ARR_SIZE; k++) {
-                array.push(Math.floor(Math.random() * (MAX_VAL - MIN_VAL + 1)) + MIN_VAL);
-            }
-            renderArray();
-            
-            // Create the generator instance
-            generator = quickSortGenerator(array, 0, array.length - 1);
-            statusEl.textContent = "New Array Generated";
-            detailEl.textContent = "Current Pivot: None";
-        }
-
-        // Render the bars
-        function renderArray(state = {}) {
-            container.innerHTML = '';
-            
-            array.forEach((val, idx) => {
-                const barContainer = document.createElement('div');
-                barContainer.className = 'bar-container';
-
-                const bar = document.createElement('div');
-                bar.className = 'bar';
-                bar.style.height = `${val * 3}px`;
-                
-                // Colors based on state
-                if (state.sorted && state.sorted.includes(idx)) bar.classList.add('sorted');
-                
-                // Highlight current partition range
-                if (state.low !== undefined && idx >= state.low && idx <= state.high) {
-                    bar.classList.add('active-range');
-                }
-
-                // Highlight Pivot (visually, the value being compared against)
-                // In Hoare, the pivot is a value, but usually derived from arr[low] initially
-                if (state.pivotIdx === idx) {
-                    bar.classList.add('is-pivot');
-                }
-
-                // Value Label
-                const label = document.createElement('span');
-                label.className = 'value-label';
-                label.textContent = val;
-
-                // Markers for i and j
-                if (state.i === idx) {
-                    const markI = document.createElement('div');
-                    markI.className = 'pointer-marker marker-i visible';
-                    markI.textContent = 'i';
-                    barContainer.appendChild(markI);
-                }
-                if (state.j === idx) {
-                    const markJ = document.createElement('div');
-                    markJ.className = 'pointer-marker marker-j visible';
-                    markJ.textContent = 'j';
-                    barContainer.appendChild(markJ);
-                }
-
-                barContainer.appendChild(bar);
-                barContainer.appendChild(label);
-                container.appendChild(barContainer);
-            });
-        }
-
-        function nextStep() {
-            if (!generator) return;
-            
-            const result = generator.next();
-            
-            if (result.done) {
-                statusEl.textContent = "Sorting Complete!";
-                detailEl.textContent = "Array is fully sorted.";
-                stopAuto();
-                renderArray({ sorted: array.map((_, i) => i) }); // Highlight all green
-                return;
+            for (let k = 0; k < CONFIG.size; k++) {
+                array.push(Math.floor(Math.random() * (CONFIG.max - CONFIG.min + 1)) + CONFIG.min);
             }
 
-            const state = result.value;
-            renderArray(state);
-            statusEl.textContent = state.msg;
-            
-            let detailText = `Range: [${state.low}, ${state.high}] | Pivot Value: ${state.pivotVal}`;
-            if(state.compare) detailText += ` | Comparing: ${state.compare}`;
-            detailEl.textContent = detailText;
-        }
-
-        function toggleAuto() {
-            if (isAutoPlaying) {
-                stopAuto();
+            if (mode === 'watch') {
+                generator = quickSortGenerator(array, 0, array.length - 1);
+                render( { msg: "Ready. Click 'Next Step' to start." });
             } else {
-                isAutoPlaying = true;
-                document.getElementById('btn-auto').textContent = "Stop Auto";
-                autoInterval = setInterval(nextStep, 600);
+                initPractice();
             }
         }
 
-        function stopAuto() {
-            isAutoPlaying = false;
-            document.getElementById('btn-auto').textContent = "Auto Play";
-            clearInterval(autoInterval);
+        function setMode(newMode) {
+            mode = newMode;
+            document.getElementById('mode-watch').className = `mode-btn ${mode === 'watch' ? 'active' : ''}`;
+            document.getElementById('mode-practice').className = `mode-btn ${mode === 'practice' ? 'active' : ''}`;
+            
+            // Toggle Buttons
+            document.getElementById('btn-step').style.display = mode === 'watch' ? 'inline-block' : 'none';
+            document.getElementById('btn-auto').style.display = mode === 'watch' ? 'inline-block' : 'none';
+            document.getElementById('btn-swap').style.display = 'none';
+            document.getElementById('btn-split').style.display = 'none';
+
+            initGame();
         }
 
-        // --- THE ALGORITHM (Hoare Logic) ---
-        
-        function* quickSortGenerator(arr, low, high) {
-            if (low < high) {
-                // Yield state: Starting partition
-                yield { 
-                    arr: [...arr], low, high, i: low-1, j: high+1, 
-                    pivotIdx: low, pivotVal: arr[low],
-                    msg: `Partitioning range [${low}, ${high}]. Pivot is ${arr[low]}.`
-                };
-
-                // Perform Partition and yield intermediate steps
-                // We delegate to a specific partition generator
-                const p = yield* partitionGenerator(arr, low, high);
-
-                // Recursively sort left
-                yield* quickSortGenerator(arr, low, p);
-                
-                // Recursively sort right
-                yield* quickSortGenerator(arr, p + 1, high);
-            } else if (low === high) {
-                 yield { 
-                    arr: [...arr], low, high, 
-                    msg: `Single element [${low}] is already sorted.`
-                };
-            }
-        }
-
-        function* partitionGenerator(arr, low, high) {
-            const pivot = arr[low];
-            let i = low - 1;
-            let j = high + 1;
-
-            while (true) {
-                // Find element on left that should be on right
-                do {
-                    i++;
-                    yield { 
-                        arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
-                        msg: `Moving i right... Is ${arr[i]} < ${pivot}?`,
-                        compare: `${arr[i]} < ${pivot}`
-                    };
-                } while (arr[i] < pivot);
-
-                // Find element on right that should be on left
-                do {
-                    j--;
-                    yield { 
-                        arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
-                        msg: `Moving j left... Is ${arr[j]} > ${pivot}?`,
-                        compare: `${arr[j]} > ${pivot}`
-                    };
-                } while (arr[j] > pivot);
-
-                // Check if pointers crossed
-                if (i >= j) {
-                    yield { 
-                        arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
-                        msg: `Pointers crossed (i >= j). Partition point is ${j}.`
-                    };
-                    return j;
-                }
-
-                // Swap
-                yield { 
-                    arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
-                    msg: `Swapping ${arr[i]} and ${arr[j]} because they are on wrong sides.`
-                };
-                
-                [arr[i], arr[j]] = [arr[j], arr[i]];
-
-                yield { 
-                    arr: [...arr], low, high, i, j, pivotIdx: low, pivotVal: pivot,
-                    msg: `Swapped!`
-                };
-            }
-        }
-
-        // Start on load
-        window.onload = initArray;
-
-    </script>
-</body>
-</html>
+        // --- Rendering ---
+        function render(state) {
+            const container = document.getElementById('container');
+            container.innerHTML = '';
+            
+            // Safe defaults
+            const low = state.low !== undefined ? state.low : -1;
+            const high = state.high !== undefined ?
